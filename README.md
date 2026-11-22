@@ -33,7 +33,7 @@ npx eas-cli@latest init
 
 İlk derlemede EAS imzalama bilgilerini sorar. Gerçek iPhone/App Store dağıtımı Apple Developer hesabı ve imzalama gerektirir. Simülatör çıktısı iPhone'a kurulamaz. Mağazaya yükleme otomatik yapılmaz.
 
-Uygulama kimliği iki platformda da `com.akcak.devremimari` olarak hazırlanmıştır. İlk mağaza kaydından önce kendi yayıncı kimliğinize uygunluğunu kontrol edin. Sürüm `1.0.0`; mağaza derleme numaraları EAS tarafından artırılır.
+Uygulama kimliği iki platformda da `pikserax.devremimari` olarak hazırlanmıştır. İlk mağaza kaydından önce kendi yayıncı kimliğinize uygunluğunu kontrol edin. Sürüm `1.0.0`; mağaza derleme numaraları EAS tarafından artırılır.
 
 ## Dosyalar
 

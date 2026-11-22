@@ -10,7 +10,7 @@ const pluginSrc = fs.readFileSync(path.join(root, 'node_modules', 'react-native-
 const knownMatch = pluginSrc.match(/KNOWN_PLUGIN_PARAMETER_KEYS\s*=\s*\[([\s\S]*?)\]/);
 const KNOWN_PLUGIN_PARAMETER_KEYS = [...knownMatch[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
 
-test('interstitial ad policy enforces onboarding protection, 3-round threshold, and 3-minute cooldown', () => {
+test('interstitial ad policy enforces onboarding protection, 3-round threshold, and 5-minute cooldown', () => {
   let clock = 1_000_000;
   const policy = createAdPolicy({}, () => clock);
 
@@ -28,7 +28,7 @@ test('interstitial ad policy enforces onboarding protection, 3-round threshold, 
   policy.recordRound();
   policy.recordRound();
   policy.recordRound();
-  clock += 2 * 60 * 1000;
+  clock += 4 * 60 * 1000;
   assert.equal(policy.isEligible(), false);
 
   clock += 60 * 1000;
@@ -43,7 +43,7 @@ test('interstitial ad policy enforces onboarding protection, 3-round threshold, 
   assert.equal(policy.isEligible(), true);
 });
 
-test('app.json AdMob plugin uses valid SDK v17 parameter keys and test App IDs', () => {
+test('app.json AdMob plugin uses valid SDK v17 parameter keys and App IDs', () => {
   const appJson = JSON.parse(fs.readFileSync(path.join(root, 'app.json'), 'utf8'));
   const entry = appJson.expo.plugins.find(p => Array.isArray(p) && p[0] === 'react-native-google-mobile-ads');
   assert.ok(entry, 'react-native-google-mobile-ads plugin missing from app.json');
@@ -52,8 +52,8 @@ test('app.json AdMob plugin uses valid SDK v17 parameter keys and test App IDs',
   for (const key of Object.keys(opts)) {
     assert.ok(known.has(key), `Unknown AdMob plugin key: ${key}`);
   }
-  assert.match(opts.androidAppId, /^ca-app-pub-3940256099942544~/);
-  assert.match(opts.iosAppId, /^ca-app-pub-3940256099942544~/);
+  assert.equal(opts.androidAppId, 'ca-app-pub-5635814061302700~1419269626');
+  assert.match(opts.iosAppId, /^ca-app-pub-\d+~\d+$/);
   assert.ok(Array.isArray(opts.skAdNetworkItems) && opts.skAdNetworkItems.length > 0);
 });
 

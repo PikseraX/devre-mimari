@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, BackHandler, Platform, Pressable, StatusBar, StyleSheet, Text, Vibration, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, BackHandler, Linking, Platform, Pressable, StatusBar, StyleSheet, Text, Vibration, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
@@ -67,6 +67,7 @@ function Game() {
   const rewardedEarnedRef = useRef(false);
   const adsInitStartedRef = useRef(false);
   const adsInitializedRef = useRef(false);
+  const privacyOptionsRequiredRef = useRef(false);
 
   const iapReadyRef = useRef(false);
   const iapInitPromiseRef = useRef(null);
@@ -271,6 +272,27 @@ function Game() {
     ad.load();
   }, [cleanupInterstitial, setWebViewPaused]);
 
+  const pushPrivacyStateToWebView = useCallback((required) => {
+    if (typeof required === 'boolean') {
+      privacyOptionsRequiredRef.current = required;
+    }
+    if (!webViewLoadedRef.current || !webview.current) return;
+    const payload = JSON.stringify({ required: !!privacyOptionsRequiredRef.current });
+    webview.current.injectJavaScript(
+      `window.__onNativePrivacyState && window.__onNativePrivacyState(${payload}); true;`
+    );
+  }, []);
+
+  const openPrivacyOptionsForm = useCallback(async () => {
+    try {
+      await AdsConsent.showPrivacyOptionsForm();
+      const updated = await AdsConsent.requestInfoUpdate().catch(() => null);
+      if (updated) {
+        pushPrivacyStateToWebView(updated.privacyOptionsRequirementStatus === 'REQUIRED');
+      }
+    } catch {}
+  }, [pushPrivacyStateToWebView]);
+
   const initAdsIfNeeded = useCallback(async () => {
     if (adFreeRef.current) return;
     if (adsInitializedRef.current) {
@@ -284,8 +306,10 @@ function Game() {
     if (adsInitStartedRef.current) return;
     adsInitStartedRef.current = true;
     try {
-      await AdsConsent.requestInfoUpdate().catch(() => {});
-      await AdsConsent.loadAndShowConsentFormIfRequired().catch(() => {});
+      const consentInfo = await AdsConsent.requestInfoUpdate().catch(() => null);
+      const afterForm = await AdsConsent.loadAndShowConsentFormIfRequired().catch(() => consentInfo);
+      const finalInfo = afterForm || consentInfo;
+      pushPrivacyStateToWebView(finalInfo?.privacyOptionsRequirementStatus === 'REQUIRED');
       await mobileAds().initialize();
       adsInitializedRef.current = true;
       if (!mountedRef.current || adFreeRef.current) {
@@ -298,7 +322,7 @@ function Game() {
     } catch {
       adsInitStartedRef.current = false;
     }
-  }, [preloadInterstitial]);
+  }, [preloadInterstitial, preloadRewarded, pushPrivacyStateToWebView]);
 
   const persistAdFree = useCallback(async (enabled) => {
     adFreeRef.current = enabled;
@@ -702,13 +726,17 @@ function Game() {
       } catch {}
     } else if (message.type === 'iap') {
       void handleIapAction(message.action, message.productId);
+    } else if (message.type === 'privacy_options') {
+      void openPrivacyOptionsForm();
+    } else if (message.type === 'feedback') {
+      Linking.openURL('mailto:pikserax@gmail.com?subject=Devre%20Mimari%20Geri%20Bildirim').catch(() => {});
     } else if (message.type === 'exit' && Platform.OS === 'android') {
       Alert.alert('Oyundan çıkılsın mı?', 'Kaydedilmiş ilerlemeniz korunur.', [
         { text: 'Devam et', style: 'cancel' },
         { text: 'Çık', onPress: () => { saveQueue.current.finally(() => BackHandler.exitApp()); } },
       ]);
     }
-  }, [handleIapAction, tryShowInterstitial, tryShowRewarded]);
+  }, [handleIapAction, openPrivacyOptionsForm, tryShowInterstitial, tryShowRewarded]);
 
   if (error) return <View style={styles.center}><Text style={styles.text}>{error}</Text><Pressable onPress={hydrate} style={styles.button}><Text style={styles.text}>Yeniden dene</Text></Pressable></View>;
   if (!source) return <View style={styles.center}><ActivityIndicator color="#38bdf8" /></View>;
@@ -724,6 +752,7 @@ function Game() {
         onLoadEnd={() => {
           webViewLoadedRef.current = true;
           pushIapStateToWebView();
+          pushPrivacyStateToWebView();
           void flushPendingConsumables();
         }}
         onMessage={onMessage}

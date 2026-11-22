@@ -950,6 +950,31 @@
                 </div>
                 <div id="account-status-msg" class="text-[10px] font-bold text-emerald-400 text-center min-h-[14px]"></div>
             </div>
+            <div class="border-t border-slate-800 pt-2 flex flex-wrap gap-1.5">
+                <button id="btn-feedback" type="button" class="flex-1 py-2 px-2 rounded-xl bg-slate-800 border border-cyan-500/40 text-cyan-300 font-bold text-[10px] active:scale-95">
+                    💬 Geri Bildirim
+                </button>
+                <button id="btn-open-privacy" type="button" class="flex-1 py-2 px-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-bold text-[10px] active:scale-95">
+                    🔒 Gizlilik Politikası
+                </button>
+                <button id="btn-privacy-options" type="button" class="hidden flex-1 py-2 px-2 rounded-xl bg-indigo-950/70 border border-indigo-500/40 text-indigo-300 font-bold text-[10px] active:scale-95">
+                    🛡️ Reklam Gizlilik Tercihleri
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 8C. Gizlilik Politikası Penceresi -->
+    <div id="privacy-modal" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="w-full max-w-md max-h-[82vh] overflow-y-auto rounded-3xl bg-slate-900 border border-slate-700 p-5 space-y-3 shadow-2xl text-left">
+            <div class="flex items-center justify-between">
+                <h3 class="text-base font-black text-cyan-300">🔒 Gizlilik Politikası / Privacy Policy</h3>
+                <button id="btn-close-privacy" type="button" class="w-8 h-8 rounded-full bg-slate-800 text-slate-300 font-black">✕</button>
+            </div>
+            <div class="text-xs text-slate-300 space-y-2 leading-relaxed">
+                <p><strong>TR:</strong> Devre Mimarı çevrimdışı oynanabilen bir bulmaca oyunudur. İlerlemeniz, yıldızlarınız ve ayarlarınız yalnızca kendi cihazınızda saklanır. Ücretsiz sürümde Google AdMob reklamları gösterilebilir; Avrupa/AEA kullanıcıları Ayarlar'daki <em>Reklam Gizlilik Tercihleri</em> seçeneğinden izinlerini diledikleri zaman değiştirebilir. Uygulama içi satın alımlar Google Play veya Apple App Store üzerinden güvenle işlenir.</p>
+                <p><strong>EN:</strong> Circuit Architect (Devre Mimarı) is an offline puzzle game. Your progress and settings are stored locally on your device only. The free version may show Google AdMob ads; EEA/UK users can update consent anytime via <em>Ad Privacy Options</em> in Settings. In-app purchases are securely handled by Google Play or Apple App Store.</p>
+            </div>
         </div>
     </div>
 
@@ -3196,6 +3221,32 @@
             sfx.syncAmbient();
             saveProgress();
         });
+        document.getElementById('btn-feedback')?.addEventListener('click', () => {
+            sfx.playClick(1);
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'feedback' }));
+            } else {
+                window.location.href = 'mailto:pikserax@gmail.com?subject=Devre%20Mimari%20Geri%20Bildirim';
+            }
+        });
+        document.getElementById('btn-open-privacy')?.addEventListener('click', () => {
+            document.getElementById('privacy-modal')?.classList.remove('hidden');
+            sfx.playClick(1);
+        });
+        document.getElementById('btn-close-privacy')?.addEventListener('click', () => {
+            document.getElementById('privacy-modal')?.classList.add('hidden');
+        });
+        document.getElementById('btn-privacy-options')?.addEventListener('click', () => {
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'privacy_options' }));
+            }
+        });
+        window.__onNativePrivacyState = function(payload) {
+            const btn = document.getElementById('btn-privacy-options');
+            if (!btn) return;
+            if (payload && payload.required) btn.classList.remove('hidden');
+            else btn.classList.add('hidden');
+        };
         document.getElementById('btn-toggle-haptics')?.addEventListener('click', () => {
             state.hapticsEnabled = !state.hapticsEnabled;
             syncAccessibilityButtons();
@@ -4893,7 +4944,7 @@
         });
 
         // Pencerelerin dış karanlık alanına (backdrop) dokunarak veya ESC ile kapatma
-        ['era-unlock-modal', 'map-modal', 'guide-modal', 'calendar-modal', 'wheel-modal', 'editor-modal', 'account-modal', 'leaderboard-modal'].forEach(id => {
+        ['privacy-modal', 'era-unlock-modal', 'map-modal', 'guide-modal', 'calendar-modal', 'wheel-modal', 'editor-modal', 'account-modal', 'leaderboard-modal'].forEach(id => {
             const modalEl = document.getElementById(id);
             if (!modalEl) return;
             modalEl.addEventListener('click', (ev) => {
@@ -4906,7 +4957,7 @@
 
         window.addEventListener('keydown', (ev) => {
             if (ev.key === 'Escape') {
-                ['era-unlock-modal', 'lang-modal', 'map-modal', 'guide-modal', 'calendar-modal', 'wheel-modal', 'editor-modal', 'account-modal', 'leaderboard-modal'].forEach(id => {
+                ['privacy-modal', 'era-unlock-modal', 'lang-modal', 'map-modal', 'guide-modal', 'calendar-modal', 'wheel-modal', 'editor-modal', 'account-modal', 'leaderboard-modal'].forEach(id => {
                     if (id === 'wheel-modal' && state.isWheelSpinning) return;
                     document.getElementById(id)?.classList.add('hidden');
                 });
@@ -4918,7 +4969,7 @@
             try { history.pushState({ devreMimari: true }, ''); } catch (e) {}
         }
         window.addEventListener('popstate', () => {
-            const closableIds = ['era-unlock-modal', 'lang-modal', 'map-modal', 'guide-modal', 'calendar-modal', 'wheel-modal', 'editor-modal', 'account-modal', 'leaderboard-modal'];
+            const closableIds = ['privacy-modal', 'era-unlock-modal', 'lang-modal', 'map-modal', 'guide-modal', 'calendar-modal', 'wheel-modal', 'editor-modal', 'account-modal', 'leaderboard-modal'];
             for (const id of closableIds) {
                 const el = document.getElementById(id);
                 if (el && !el.classList.contains('hidden')) {
