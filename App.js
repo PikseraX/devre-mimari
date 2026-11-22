@@ -67,6 +67,7 @@ function Game() {
   const rewardedEarnedRef = useRef(false);
   const adsInitStartedRef = useRef(false);
   const adsInitializedRef = useRef(false);
+  const initAdsRef = useRef(null);
   const privacyOptionsRequiredRef = useRef(false);
 
   const iapReadyRef = useRef(false);
@@ -133,6 +134,7 @@ function Game() {
       interstitialCleanupRef.current();
       interstitialCleanupRef.current = null;
     }
+    interstitialRef.current = null;
   }, []);
 
   const cleanupRewarded = useCallback(() => {
@@ -140,6 +142,7 @@ function Game() {
       rewardedCleanupRef.current();
       rewardedCleanupRef.current = null;
     }
+    rewardedRef.current = null;
   }, []);
 
   const preloadRewarded = useCallback(() => {
@@ -172,7 +175,9 @@ function Game() {
       rewardedLoadingRef.current = false;
       rewardedEarnedRef.current = false;
       rewardedPendingTypeRef.current = null;
-      setWebViewPaused(false);
+      if (!interstitialShowingRef.current && !rewardedShowingRef.current && AppState.currentState === 'active') {
+        setWebViewPaused(false);
+      }
       if (earned && rType) {
         const safeType = JSON.stringify(rType).replace(/</g, '\\u003c');
         webview.current?.injectJavaScript(`if (typeof window.__onNativeRewardEarned === 'function') window.__onNativeRewardEarned(${safeType}); true;`);
@@ -201,14 +206,9 @@ function Game() {
   }, [cleanupRewarded, setWebViewPaused]);
 
   const tryShowRewarded = useCallback(async (rewardType) => {
-    if (rewardedShowingRef.current) return;
-    if (!adsInitializedRef.current) {
-      try {
-        await AdsConsent.requestInfoUpdate().catch(() => {});
-        await AdsConsent.loadAndShowConsentFormIfRequired().catch(() => {});
-        await mobileAds().initialize();
-        adsInitializedRef.current = true;
-      } catch {}
+    if (rewardedShowingRef.current || interstitialShowingRef.current) return;
+    if (!adsInitializedRef.current && initAdsRef.current) {
+      await initAdsRef.current();
     }
     if (!rewardedLoadedRef.current || !rewardedRef.current) {
       preloadRewarded();
@@ -251,7 +251,9 @@ function Game() {
       interstitialShowingRef.current = false;
       interstitialLoadedRef.current = false;
       interstitialLoadingRef.current = false;
-      setWebViewPaused(false);
+      if (!interstitialShowingRef.current && !rewardedShowingRef.current && AppState.currentState === 'active') {
+        setWebViewPaused(false);
+      }
       cleanupInterstitial();
       preloadInterstitial();
     });
@@ -294,13 +296,14 @@ function Game() {
   }, [pushPrivacyStateToWebView]);
 
   const initAdsIfNeeded = useCallback(async () => {
-    if (adFreeRef.current) return;
     if (adsInitializedRef.current) {
-      if (mountedRef.current) {
+      if (!mountedRef.current) return;
+      if (!adFreeRef.current) {
         setAdsReady(true);
         setBannerKey(k => k + 1);
+        preloadInterstitial();
       }
-      preloadInterstitial();
+      preloadRewarded();
       return;
     }
     if (adsInitStartedRef.current) return;
@@ -312,17 +315,17 @@ function Game() {
       pushPrivacyStateToWebView(finalInfo?.privacyOptionsRequirementStatus === 'REQUIRED');
       await mobileAds().initialize();
       adsInitializedRef.current = true;
-      if (!mountedRef.current || adFreeRef.current) {
-        preloadRewarded();
-        return;
-      }
-      setAdsReady(true);
-      preloadInterstitial();
+      if (!mountedRef.current) return;
       preloadRewarded();
+      if (!adFreeRef.current) {
+        setAdsReady(true);
+        preloadInterstitial();
+      }
     } catch {
       adsInitStartedRef.current = false;
     }
   }, [preloadInterstitial, preloadRewarded, pushPrivacyStateToWebView]);
+  initAdsRef.current = initAdsIfNeeded;
 
   const persistAdFree = useCallback(async (enabled) => {
     adFreeRef.current = enabled;
@@ -520,7 +523,7 @@ function Game() {
   }, [clearIapWatchdog, processPurchase, pushIapStateToWebView, reconcilePurchases]);
 
   const tryShowInterstitial = useCallback(() => {
-    if (adFreeRef.current || !adsReady || interstitialShowingRef.current) return;
+    if (adFreeRef.current || !adsReady || interstitialShowingRef.current || rewardedShowingRef.current) return;
     if (!adPolicyRef.current.isEligible()) return;
     if (!interstitialLoadedRef.current || !interstitialRef.current) {
       preloadInterstitial();
@@ -545,7 +548,6 @@ function Game() {
           adFreeRef.current = true;
           setAdFree(true);
           pushIapStateToWebView({ adFree: true });
-          return;
         }
         await initAdsIfNeeded();
       } catch {}
@@ -676,6 +678,9 @@ function Game() {
         if (adsReady && !adFreeRef.current) {
           if (!bannerLoaded) setBannerKey(k => k + 1);
           preloadInterstitial();
+        }
+        if (adsInitializedRef.current) {
+          preloadRewarded();
         }
         void ensureIapReady().then(ready => {
           if (ready && !iapBusyRef.current) return reconcilePurchases();

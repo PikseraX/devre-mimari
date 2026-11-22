@@ -1089,7 +1089,7 @@
                 } catch (e) {}
             },
             tone(freq, dur = 0.08, type = 'sine', vol = 0.12) {
-                if (!this.enabled) return;
+                if (!this.enabled || window.__nativePaused) return;
                 try {
                     this.init();
                     if (!this.ctx) return;
@@ -2102,6 +2102,7 @@
             state.undosLeft = isUndoUnlocked() ? 2 : 0;
             state.undoStack = [];
             state.usedRewardFuseThisLevel = false;
+            state.streakProtectedThisLevel = false;
 
             updatePolarityUI();
             renderBoard();
@@ -2159,13 +2160,15 @@
             decay: '💡 Yeni Eleman: ⏳ Sönümleyici — Başka kareye bastıkça voltajı 1V\'a kadar düşer!',
             ac: '💡 Yeni Eleman: ~V AC Faz — Her hamlede +V / -V işaret değiştirir!',
             induct: '💡 Yeni Eleman: ➕→ Bobin — Sağındaki komşu soketi otomatik +1V yükseltir!',
-            emp: '💡 Yeni Eleman: 🧲 EMP Soketi — Açıldığında etrafındaki kilitsiz komşuları sıfırlar!',
-            phase: '💡 Yeni Eleman: 🔄 Faz Çevirici — Üzerine basınca tüm ~V AC fazını tersine çevirir!',
+            emp: '💡 Yeni Eleman: 🧲 EMP Soketi — Açıldığında satır ve sütunundaki 2x/3x trafoları 1x\'e bastırır!',
+            phase: '💡 Yeni Eleman: 🔄 Faz Çevirici — 2V yapıldığında satırındaki -V soketleri +V\'ye çevirir!',
             equalRows: '💡 Yeni Kural: = Eşit Hat — İşaretli iki satırın toplam voltajı eşit olmalı!',
             flexibleRow: '💡 Yeni Kural: ±1V Esnek Hat — Bu satır hedefin ±1V yakınıyla kabul edilir!'
         };
 
         function showFirstMechanicOnboardingTip() {
+            const menuOverlay = document.getElementById('main-menu-overlay');
+            if (menuOverlay && !menuOverlay.classList.contains('hidden')) return;
             if (!Array.isArray(state.seenMechanics)) state.seenMechanics = [];
             const present = new Set();
             for (let r = 0; r < state.gridSize; r++) {
@@ -2924,7 +2927,8 @@
 
             state.totalWatt += wattEarned;
             const grantsProgression = (!state.isDailyMode || !alreadyCompletedDaily) &&
-                                      (isFirstSolve || state.isDailyMode || state.isMarathonMode || isEndgamePlayer);
+                                      (!state.isWeeklyMode || !alreadyCompletedWeekly) &&
+                                      (isFirstSolve || state.isDailyMode || state.isMarathonMode || state.isWeeklyMode || isEndgamePlayer);
 
             if (grantsProgression) {
                 state.totalLevelsSolved++;
@@ -2935,9 +2939,10 @@
                     incrementQuestType('nofuse', 1);
                     incrementQuestType('streak', state.streak);
                     incrementQuestType('bonus', 1);
-                } else {
+                } else if (!state.streakProtectedThisLevel) {
                     if (state.streak > 0 && state.streakFreezes > 0) {
                         state.streakFreezes--;
+                        state.streakProtectedThisLevel = true;
                         setStatus(`🛡️ Seri Kalkanı devreye girdi! ${state.streak} serin korundu!`, 'info');
                     } else {
                         state.streak = 0;
@@ -3019,9 +3024,10 @@
             notifyNativeAd('round_completed');
             state.isTransitioning = true;
             let shieldSavedStreak = false;
-            if (!isBlitzTimeout && !state.isCustomMode) {
+            if (!isBlitzTimeout && !state.isCustomMode && !state.streakProtectedThisLevel) {
                 if (state.streak > 0 && state.streakFreezes > 0) {
                     state.streakFreezes--;
+                    state.streakProtectedThisLevel = true;
                     shieldSavedStreak = true;
                 } else {
                     state.streak = 0;
@@ -3112,10 +3118,11 @@
             if (rewardType === 'fuse') {
                 state.usedRewardFuseThisLevel = true;
                 state.fuses = Math.max(1, state.fuses + 1);
-                if (state.moves >= state.maxMoves) state.maxMoves = state.moves + 3;
+                if (getCurrentStageMoves() >= state.maxMoves) state.maxMoves = getCurrentStageMoves() + 3;
                 state.isGameOver = false;
                 state.isTransitioning = false;
                 document.getElementById('result-modal').classList.add('hidden');
+                if (state.isBlitzMode && state.blitzTimeLeft > 0 && !blitzInterval) startBlitzTimer();
                 sfx.playWin();
                 setStatus('🎬 Ödül alındı! +1⚡ Sigorta ile operasyona devam ediyorsun!', 'info');
                 renderBoard();
@@ -3353,6 +3360,7 @@
 
             state.grid[tr][tc] = solVal;
             state.fixedGrid[tr][tc] = true;
+            state.undoStack = [];
 
             // Eğer ipucu sonrası aktif blok sınırı aşıldıysa oyuncunun yanlış açtığı (çözümde 0V olan) soketi otomatik sıfırla
             let autoClearedParity = 0;
@@ -4283,6 +4291,7 @@
             state.undosLeft = isUndoUnlocked() ? 2 : 0;
             state.undoStack = [];
             state.usedRewardFuseThisLevel = false;
+            state.streakProtectedThisLevel = false;
             updatePolarityUI();
             renderBoard();
             showFirstMechanicOnboardingTip();
@@ -4432,6 +4441,7 @@
                 if (applyLoadedPayload(parsed)) {
                     applied = true;
                     applyBodyTheme();
+                    sfx.syncAmbient();
                     renderMainMenu();
                     saveProgress();
                     return true;
@@ -4846,6 +4856,7 @@
                 document.getElementById('input-player-name').value = state.playerName;
                 document.getElementById('input-player-pin').value = state.playerPin;
                 document.getElementById('backup-code-box').value = encodeBackupCode();
+                if (typeof renderAccountStats === 'function') renderAccountStats();
             }
             document.getElementById('account-status-msg').textContent = ok ? '✓ Yedek başarıyla yüklendi!' : '⚠️ Geçersiz yedek kodu!';
         });
@@ -4936,7 +4947,7 @@
         document.addEventListener('visibilitychange', () => {
             sfx.syncAmbient();
             if (!sfx.ctx) return;
-            if (document.hidden) {
+            if (document.hidden || window.__nativePaused) {
                 sfx.ctx.suspend().catch(() => {});
             } else if (sfx.enabled) {
                 sfx.ctx.resume().catch(() => {});
